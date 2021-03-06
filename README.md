@@ -36,11 +36,55 @@ new LoginContext("Sample", new SampleCallbackHandler());
 ```
 
 ### 运行
-```
+```shell
 mvn clean compile
 cd target/classes
 java -Djava.security.auth.login.config==sample_jaas.config me.kvn.codes.authn.SampleAuthn
 ```
 系统将提示您输入用户名和密码，登录配置文件中指定的 SampleLoginModule 将进行检查，以确保这些都是正确的。SampleLoginModule 需要 `testUser` 作为用户名，`testPassword` 作为密码。
+
+### 运行（安全管理器）
+当 Java 程序在安装了安全管理器的情况下运行时，不允许程序访问资源或执行对安全性敏感的操作，除非现行安全策略明确授予程序这样做的权限。
+大多数浏览器都安装了安全管理器，因此 applet 通常在安全管理器的监督下运行。另一方面，应用程序则不会，因为在应用程序运行时不会自动安装安全管理器
+
+要使用安全管理器运行应用程序，只需使用命令行中包含的 `-Djava.security.manager` 参数调用解释器。
+
+```shell
+java -Djava.security.manager -Djava.security.auth.login.config==sample_jaas.config me.kvn.codes.authn.SampleAuthn
+```
+执行以上命令后，出现错误：
+```shell
+Cannot create LoginContext. access denied ("javax.security.auth.AuthPermission" "createLoginContext.Sample")
+```
+按照下列步骤解决以上问题：
+
+0. 构建
+```shell
+mvn clean compile
+cd target/classes
+```
+
+1. 创建 `SampleAuthn.jar`
+
+```shell
+jar -cvf SampleAuthn.jar me/kvn/codes/authn/SampleAuthn4SecurityMgr.class me/kvn/codes/authn/SampleCallbackHandler4SecurityMgr.class
+```
+
+**备注：SampleAuthn 与 SampleAuthn4SecurityMgr 的区别在于分别引用了 SampleCallbackHandler 和 SampleCallbackHandler4SecurityMgr，后两者的区别是 `System.console().readPassword()` 会引发安全异常。该异常暂时未能解决，考虑到本例仅是样例程序，故改用明文输入密码的方式展示最终效果。**
+
+2. 创建 `SampleLM.jar` (SampleLoginModule)
+
+```shell
+jar -cvf SampleLM.jar me/kvn/codes/authn/modules/SampleLoginModule.class me/kvn/codes/authn/principals/SamplePrincipal.class
+```
+
+3. 创建授权策略文件
+
+`resources/sample_security.policy`，其中包含两部分授权：`SampleAuthn.jar` 拥有 `createLoginContext.Sample` 的权限，`SampleLM.jar` 拥有 `modifyPrincipals` 的权限。
+
+4. 执行
+```shell
+java -classpath SampleAuthn.jar:SampleLM.jar -Djava.security.manager -Djava.security.policy==sample_security.policy -Djava.security.auth.login.config==sample_jaas.config me.kvn.codes.authn.SampleAuthn4SecurityMgr
+```
 
 ## Authorization
