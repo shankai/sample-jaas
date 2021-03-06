@@ -1,0 +1,12 @@
+grant codebase "file:./SampleAction.jar", Principal me.kvn.codes.authn.principals.SamplePrincipal "testUser" {
+    permission java.util.PropertyPermission "java.home", "read";
+    permission java.util.PropertyPermission "user.home", "read";
+    permission java.io.FilePermission "foo.txt", "read";
+};
+grant codebase "file:./SampleAuthz.jar" {
+    permission javax.security.auth.AuthPermission "createLoginContext.Sample";
+    permission javax.security.auth.AuthPermission "doAsPrivileged";
+};
+grant codebase "file:./SampleLM.jar" {
+    permission javax.security.auth.AuthPermission "modifyPrincipals";
+};

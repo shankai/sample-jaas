@@ -1,10 +1,17 @@
 # JAAS Samples
+```shell
+$ java -version 
+openjdk version "11.0.2" 2019-01-15
+OpenJDK Runtime Environment 18.9 (build 11.0.2+9)
+OpenJDK 64-Bit Server VM 18.9 (build 11.0.2+9, mixed mode)
+```
 
 ## Authentication
+> package `me.kvn.codes.authn`
 
 ### 源码
 
-#### LoginContext
+#### SampleAuthn
 SampleAuthn 类的主方法执行身份验证，然后报告身份验证是否成功。
 1. 实例化 `LoginContext` , LoginModule Name: `Sample`
 2. 调用 `LoginContext` 的 `login` 方法
@@ -80,11 +87,106 @@ jar -cvf SampleLM.jar me/kvn/codes/authn/modules/SampleLoginModule.class me/kvn/
 
 3. 创建授权策略文件
 
-`resources/sample_security.policy`，其中包含两部分授权：`SampleAuthn.jar` 拥有 `createLoginContext.Sample` 的权限，`SampleLM.jar` 拥有 `modifyPrincipals` 的权限。
+`resources/sample_authn.policy`，其中包含两部分授权：`SampleAuthn.jar` 拥有 `createLoginContext.Sample` 的权限，`SampleLM.jar` 拥有 `modifyPrincipals` 的权限。
 
 4. 执行
 ```shell
-java -classpath SampleAuthn.jar:SampleLM.jar -Djava.security.manager -Djava.security.policy==sample_security.policy -Djava.security.auth.login.config==sample_jaas.config me.kvn.codes.authn.SampleAuthn4SecurityMgr
+java -classpath SampleAuthn.jar:SampleLM.jar -Djava.security.manager -Djava.security.policy==sample_authn.policy -Djava.security.auth.login.config==sample_jaas.config me.kvn.codes.authn.SampleAuthn4SecurityMgr
 ```
 
 ## Authorization
+> package `me.kvn.codes.authz`
+
+### 源码
+
+#### SampleAuthz
+1. 实例化 `LoginContext` , LoginModule Name: `Sample`
+2. 调用 `LoginContext` 的 `login` 方法
+3. 成功认证后获得 `Subject`，并尝试进行操作。
+
+#### CallbackHandler
+SampleCallbackHandler 处理三种类型的 Callbacks:
+- NameCallback 提示用户输入用户名
+- PasswordCallback 提示输入密码
+- TextOutputCallback 报告任何错误、警告或 SampleLoginModule 希望发送给用户的其他消息。
+
+#### SampleLoginModule(复用)
+SampleLoginModule 的用户身份验证包括简单地验证用户指定的名称和密码是否具有特定的值。
+
+#### SamplePrincipal(复用)
+如果身份验证成功，SampleLoginModule 将用表示用户的 SamplePrincipal 填充 Subject。
+
+#### SampleAction
+
+SampleAction 是对 PrivilegedAction 接口的实现，用于演示授权操作。具体操作：
+1. 读取系统属性 `java.home`
+2. 读取系统属性 `user.home`
+3. 访问系统文件 `foo.txt`
+
+### 构建执行
+
+0. 构建
+```shell
+mvn clean compile
+cd target/classes
+```
+
+1. 创建 `SampleAuthz.jar`
+
+```shell
+jar -cvf SampleAuthz.jar me/kvn/codes/authz/SampleAuthz.class me/kvn/codes/authz/SampleCallbackHandler.class
+```
+
+2. 创建 `SampleLM.jar` (SampleLoginModule)
+
+> 复用与 SampleAuthn 相同的 SampleLoginModule 
+
+```shell
+jar -cvf SampleLM.jar me/kvn/codes/authn/modules/SampleLoginModule.class me/kvn/codes/authn/principals/SamplePrincipal.class
+```
+
+3. 创建 `SampleAction.jar`
+
+```shell
+jar -cvf SampleAction.jar me/kvn/codes/authz/SampleAction.class
+```
+
+3. 创建授权策略文件
+
+本例 `resources/sample_authz.policy` 的完整配置：
+```shell
+grant codebase "file:./SampleAction.jar", Principal me.kvn.codes.authn.principals.SamplePrincipal "testUser" {
+    permission java.util.PropertyPermission "java.home", "read";
+    permission java.util.PropertyPermission "user.home", "read";
+    permission java.io.FilePermission "foo.txt", "read";
+};
+grant codebase "file:./SampleAuthz.jar" {
+    permission javax.security.auth.AuthPermission "createLoginContext.Sample";
+    permission javax.security.auth.AuthPermission "doAsPrivileged";
+};
+grant codebase "file:./SampleLM.jar" {
+    permission javax.security.auth.AuthPermission "modifyPrincipals";
+};
+```
+4. 执行
+```shell
+java -classpath SampleAuthz.jar:SampleAction.jar:SampleLM.jar  -Djava.security.manager  -Djava.security.policy==sample_authz.policy  -Djava.security.auth.login.config==sample_jaas.config me.kvn.codes.authz.SampleAuthz
+```
+
+当 `resources/sample_authz.policy` 仅设置认证权限时，例如：
+```shell
+grant codebase "file:./SampleAuthz.jar" {
+    permission javax.security.auth.AuthPermission "createLoginContext.Sample";
+    permission javax.security.auth.AuthPermission "doAsPrivileged";
+};
+grant codebase "file:./SampleLM.jar" {
+    permission javax.security.auth.AuthPermission "modifyPrincipals";
+};
+```
+执行后出现错误：
+```shell
+...Omitted
+Exception in thread "main" java.security.AccessControlException: access denied ("java.util.PropertyPermission" "java.home" "read")
+...Omitted
+```
+
